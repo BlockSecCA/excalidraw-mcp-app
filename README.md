@@ -46,10 +46,9 @@ Restart Claude Desktop to pick up the new server.
 
 ## Usage
 
-1. Ask Claude to call `read_me` first (loads the element format reference)
-2. Then ask Claude to draw a diagram using `create_view`
-
-Example prompt: "Draw an architecture diagram showing a user connecting to an API server which talks to a database"
+Example prompts:
+- "Draw a cute cat using excalidraw"
+- "Draw an architecture diagram showing a user connecting to an API server which talks to a database"
 
 ## Releasing a New Version
 
