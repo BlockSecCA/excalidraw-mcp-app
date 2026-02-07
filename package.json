@@ -19,6 +19,7 @@
     }
   },
   "scripts": {
+    "postinstall": "node scripts/setup-bun.mjs || echo 'setup-bun.mjs failed or not available'",
     "build": "tsc --noEmit && cross-env INPUT=mcp-app.html vite build && tsc -p tsconfig.server.json && bun build server.ts --outdir dist --target node && bun build main.ts --outfile dist/index.js --target node --external \"./server.js\" --banner \"#!/usr/bin/env node\"",
     "watch": "cross-env INPUT=mcp-app.html vite build --watch",
     "serve": "bun --watch main.ts",
@@ -50,5 +51,18 @@
     "typescript": "^5.9.3",
     "vite": "^6.0.0",
     "vite-plugin-singlefile": "^2.3.0"
+  },
+  "optionalDependencies": {
+    "@oven/bun-darwin-aarch64": "^1.2.21",
+    "@oven/bun-darwin-x64": "^1.2.21",
+    "@oven/bun-darwin-x64-baseline": "^1.2.21",
+    "@oven/bun-linux-aarch64": "^1.2.21",
+    "@oven/bun-linux-aarch64-musl": "^1.2.21",
+    "@oven/bun-linux-x64": "^1.2.21",
+    "@oven/bun-linux-x64-baseline": "^1.2.21",
+    "@oven/bun-linux-x64-musl": "^1.2.21",
+    "@oven/bun-linux-x64-musl-baseline": "^1.2.21",
+    "@oven/bun-windows-x64": "^1.2.21",
+    "@oven/bun-windows-x64-baseline": "^1.2.21"
   }
 }
