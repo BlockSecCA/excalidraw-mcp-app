@@ -4,6 +4,16 @@
  * Or: node dist/index.js [--stdio]
  */
 
+// Catch any uncaught errors and log to stderr (shows in Claude Desktop logs)
+process.on("uncaughtException", (err) => {
+  console.error("[Excalidraw] Uncaught exception:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[Excalidraw] Unhandled rejection:", reason);
+  process.exit(1);
+});
+
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

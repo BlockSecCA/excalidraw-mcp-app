@@ -125,10 +125,9 @@ function sceneToSvgViewBox(
   };
 }
 
-function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElements, onViewport }: { toolInput: any; isFinal: boolean; displayMode: string; onElements?: (els: any[]) => void; editedElements?: any[]; onViewport?: (vp: ViewportRect) => void }) {
+function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElements, onViewport, serverRestored }: { toolInput: any; isFinal: boolean; displayMode: string; onElements?: (els: any[]) => void; editedElements?: any[]; onViewport?: (vp: ViewportRect) => void; serverRestored?: { elements: any[]; viewport: ViewportRect | null } | null }) {
   const svgRef = useRef<HTMLDivElement | null>(null);
   const latestRef = useRef<any[]>([]);
-  const restoredRef = useRef<{ id: string; elements: any[]; viewport: ViewportRect | null } | null>(null);
   const [, setCount] = useState(0);
 
   // Init pencil audio on first mount
@@ -291,17 +290,13 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
       const parsed = parsePartialElements(str);
       const { viewport, drawElements, restoreId, deleteIds } = extractViewportAndElements(parsed);
 
-      // Load checkpoint base if restoring
+      // Load checkpoint base if restoring — use server-provided data (not localStorage)
       let base: any[] | undefined;
       let savedViewport: ViewportRect | null = null;
-      if (restoreId) {
-        const saved = localStorage.getItem(`checkpoint:${restoreId}`);
-        if (saved) try {
-          const parsed = JSON.parse(saved);
-          // Handle both old format (array) and new format ({ elements, viewport })
-          base = Array.isArray(parsed) ? parsed : parsed.elements;
-          savedViewport = Array.isArray(parsed) ? null : parsed.viewport ?? null;
-        } catch {}
+      if (restoreId && serverRestored) {
+        // Server provides restored elements via structuredContent
+        base = serverRestored.elements;
+        savedViewport = serverRestored.viewport;
         if (base && deleteIds.size > 0) {
           base = base.filter((el: any) => !deleteIds.has(el.id));
         }
@@ -341,21 +336,13 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
     const safe = excludeIncompleteLastItem(parsed);
     const { viewport, drawElements } = extractViewportAndElements(safe);
 
-    // Load checkpoint base (once per restoreId)
+    // During streaming, use server-provided restored data if available
+    // (ontoolresult may fire while still streaming, providing the data early)
     let base: any[] | undefined;
     let savedViewport: ViewportRect | null = null;
-    if (streamRestoreId) {
-      if (!restoredRef.current || restoredRef.current.id !== streamRestoreId) {
-        const saved = localStorage.getItem(`checkpoint:${streamRestoreId}`);
-        if (saved) try {
-          const parsed = JSON.parse(saved);
-          const els = Array.isArray(parsed) ? parsed : parsed.elements;
-          const vp = Array.isArray(parsed) ? null : parsed.viewport ?? null;
-          restoredRef.current = { id: streamRestoreId, elements: els, viewport: vp };
-        } catch {}
-      }
-      base = restoredRef.current?.elements;
-      savedViewport = restoredRef.current?.viewport ?? null;
+    if (streamRestoreId && serverRestored) {
+      base = serverRestored.elements;
+      savedViewport = serverRestored.viewport;
       if (base && streamDeleteIds.size > 0) {
         base = base.filter((el: any) => !streamDeleteIds.has(el.id));
       }
@@ -378,7 +365,7 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
       // First render: show restored base before new elements stream in
       renderSvgPreview([], effectiveViewport, base);
     }
-  }, [toolInput, isFinal, renderSvgPreview]);
+  }, [toolInput, isFinal, renderSvgPreview, serverRestored]);
 
   // Render already-converted elements directly (skip convertToExcalidrawElements)
   useEffect(() => {
@@ -436,6 +423,7 @@ function ExcalidrawApp() {
   const [editorReady, setEditorReady] = useState(false);
   const [excalidrawApi, setExcalidrawApi] = useState<any>(null);
   const [editorSettled, setEditorSettled] = useState(false);
+  const [serverRestored, setServerRestored] = useState<{ elements: any[]; viewport: ViewportRect | null } | null>(null);
   const appRef = useRef<App | null>(null);
   const svgViewportRef = useRef<ViewportRect | null>(null);
   const elementsRef = useRef<any[]>([]);
@@ -516,6 +504,20 @@ function ExcalidrawApp() {
   // Keep elementsRef in sync for ontoolresult handler (which captures closure once)
   useEffect(() => { elementsRef.current = elements; }, [elements]);
 
+  // Save checkpoint to localStorage after elements are populated
+  // (ontoolresult fires before React renders, so we save here instead)
+  useEffect(() => {
+    const cpId = checkpointIdRef.current;
+    if (cpId && elements.length > 0 && inputIsFinal) {
+      try {
+        localStorage.setItem(`checkpoint:${cpId}`, JSON.stringify({
+          elements,
+          viewport: svgViewportRef.current,
+        }));
+      } catch {}
+    }
+  }, [elements, inputIsFinal]);
+
   const { app, error } = useApp({
     appInfo: { name: "Excalidraw", version: "1.0.0" },
     capabilities: {},
@@ -562,21 +564,22 @@ function ExcalidrawApp() {
       };
 
       app.ontoolresult = (result: any) => {
-        const cpId = (result.structuredContent as { checkpointId?: string })?.checkpointId;
-        if (cpId) {
-          checkpointIdRef.current = cpId;
-          setCheckpointId(cpId);
+        const sc = result.structuredContent as {
+          checkpointId?: string;
+          restoredElements?: any[];
+          restoredViewport?: { x: number; y: number; width: number; height: number };
+        };
+        if (sc?.checkpointId) {
+          checkpointIdRef.current = sc.checkpointId;
+          setCheckpointId(sc.checkpointId);
           setCheckpointViewport(svgViewportRef.current);
-          // Save current elements + viewport to checkpoint
-          const els = elementsRef.current;
-          if (els.length > 0) {
-            try {
-              localStorage.setItem(`checkpoint:${cpId}`, JSON.stringify({
-                elements: els,
-                viewport: svgViewportRef.current,
-              }));
-            } catch {}
-          }
+        }
+        // Server provides restored elements — trigger re-render with restored data
+        if (sc?.restoredElements) {
+          setServerRestored({
+            elements: sc.restoredElements,
+            viewport: sc.restoredViewport ?? null,
+          });
         }
       };
 
@@ -624,7 +627,7 @@ function ExcalidrawApp() {
           onClick={displayMode === "inline" ? toggleFullscreen : undefined}
           style={{ cursor: displayMode === "inline" ? "pointer" : undefined }}
         >
-          <DiagramView toolInput={toolInput} isFinal={inputIsFinal} displayMode={displayMode} onElements={(els) => { elementsRef.current = els; setElements(els); }} editedElements={userEdits ?? undefined} onViewport={(vp) => { svgViewportRef.current = vp; }} />
+          <DiagramView toolInput={toolInput} isFinal={inputIsFinal} displayMode={displayMode} onElements={(els) => { elementsRef.current = els; setElements(els); }} editedElements={userEdits ?? undefined} onViewport={(vp) => { svgViewportRef.current = vp; }} serverRestored={serverRestored} />
         </div>
       )}
     </main>

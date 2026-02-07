@@ -1,5 +1,33 @@
 # Excalidraw MCP App Server
 
+**Origin:** Cloned from [github.com/antonpk1/excalidraw-mcp-app](https://github.com/antonpk1/excalidraw-mcp-app)
+**Security Audit:** Passed (2025-02-07) — no concerns
+**License:** MIT
+
+## Quick Reference
+
+| Action | Command |
+|--------|---------|
+| Install deps | `npm install` |
+| Build | `npm run build` |
+| Run (HTTP) | `npm run serve` → http://localhost:3001/mcp |
+| Run (stdio) | `node dist/index.js --stdio` |
+| Dev mode | `npm run dev` |
+| Build .mcpb | `mcpb pack .` (requires `npm i -g @anthropic-ai/mcpb`) |
+
+## Modes
+
+1. **Local (.mcpb/stdio)** — for Claude Desktop, runs via `--stdio`
+2. **HTTP server** — self-host or use author's Vercel: `https://excalidraw-mcp-app.vercel.app/mcp`
+
+## Local Only
+
+Not deployed to prod. Modifications stay on Kali.
+
+---
+
+# Original Developer Documentation
+
 Standalone MCP server that streams Excalidraw diagrams as SVG with hand-drawn animations.
 
 ## Architecture
@@ -64,6 +92,17 @@ npm run build
 ```
 
 Build pipeline: `tsc --noEmit` → `vite build` (singlefile HTML) → `tsc -p tsconfig.server.json` → `bun build` (server + index).
+
+### Bun CPU compatibility (Kali workaround)
+
+Bun 1.3.8 requires AVX2 instructions. If `npm run build` fails with "Illegal instruction", use esbuild:
+
+```bash
+# After vite + tsc succeed, replace the bun steps:
+npx esbuild server.ts --bundle --platform=node --outfile=dist/server.js --format=esm --packages=external
+npx esbuild main.ts --bundle --platform=node --outfile=dist/index.js --format=esm --packages=external
+sed -i '1i#!/usr/bin/env node' dist/index.js
+```
 
 ## Running
 

@@ -3,3 +3,6 @@ node_modules/
 *.mcpb
 .vercel
 bun.lock
+
+# Session notes (not tracked)
+docs/notes/

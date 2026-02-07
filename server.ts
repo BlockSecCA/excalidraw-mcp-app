@@ -3,12 +3,62 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod/v4";
 
 // Works both from source (server.ts) and compiled (dist/server.js)
-const DIST_DIR = import.meta.filename.endsWith(".ts")
-  ? path.join(import.meta.dirname, "dist")
-  : import.meta.dirname;
+// Note: import.meta.filename/dirname are Bun-only; use url conversion for Node.js
+let __filename: string;
+let __dirname: string;
+let DIST_DIR: string;
+try {
+  __filename = fileURLToPath(import.meta.url);
+  __dirname = path.dirname(__filename);
+  DIST_DIR = __filename.endsWith(".ts")
+    ? path.join(__dirname, "dist")
+    : __dirname;
+} catch (err) {
+  console.error("[Excalidraw] Failed to resolve paths:", err);
+  process.exit(1);
+}
+
+// ============================================================
+// Server-side checkpoint storage
+// Persists across tool calls in stdio mode (same process)
+// ============================================================
+interface CheckpointData {
+  elements: any[];
+  viewport?: { x: number; y: number; width: number; height: number };
+}
+const checkpointStore = new Map<string, CheckpointData>();
+
+/** Extract restoreCheckpoint ID and other elements from parsed input */
+function extractCheckpointRestore(elements: any[]): {
+  restoreId: string | null;
+  deleteIds: Set<string>;
+  newElements: any[];
+  viewport: CheckpointData["viewport"] | null;
+} {
+  let restoreId: string | null = null;
+  let viewport: CheckpointData["viewport"] | null = null;
+  const deleteIds = new Set<string>();
+  const newElements: any[] = [];
+
+  for (const el of elements) {
+    if (el.type === "restoreCheckpoint") {
+      restoreId = el.id;
+    } else if (el.type === "deleteElement") {
+      deleteIds.add(el.id);
+    } else if (el.type === "cameraUpdate" || el.type === "viewportUpdate") {
+      viewport = { x: el.x, y: el.y, width: el.width, height: el.height };
+      newElements.push(el); // keep camera in elements too
+    } else {
+      newElements.push(el);
+    }
+  }
+
+  return { restoreId, deleteIds, newElements, viewport };
+}
 
 // ============================================================
 // RECALL: shared knowledge for the agent
@@ -346,15 +396,54 @@ Call read_me first to learn the element format.`,
       _meta: { ui: { resourceUri } },
     },
     async ({ elements }): Promise<CallToolResult> => {
+      let parsed: any[];
       try {
-        JSON.parse(elements);
+        parsed = JSON.parse(elements);
       } catch (e) {
         return {
           content: [{ type: "text", text: `Invalid JSON in elements: ${(e as Error).message}. Ensure no comments, no trailing commas, and proper quoting.` }],
           isError: true,
         };
       }
+
+      // Extract restore request and new elements
+      const { restoreId, deleteIds, newElements, viewport } = extractCheckpointRestore(parsed);
+
+      // Look up stored checkpoint if restoring
+      let restoredElements: any[] | undefined;
+      let restoredViewport: CheckpointData["viewport"] | undefined;
+      if (restoreId) {
+        const stored = checkpointStore.get(restoreId);
+        if (stored) {
+          // Filter out deleted elements
+          restoredElements = deleteIds.size > 0
+            ? stored.elements.filter((el: any) => !deleteIds.has(el.id))
+            : stored.elements;
+          restoredViewport = stored.viewport;
+        }
+      }
+
+      // Generate new checkpoint ID and store current state
       const checkpointId = Math.random().toString(36).slice(2, 8);
+
+      // Store the combined state (restored + new elements) for future restores
+      const allElements = restoredElements
+        ? [...restoredElements, ...newElements]
+        : newElements;
+      checkpointStore.set(checkpointId, {
+        elements: allElements,
+        viewport: viewport ?? restoredViewport,
+      });
+
+      // Build structured content with restored data if applicable
+      const structuredContent: Record<string, any> = { checkpointId };
+      if (restoredElements) {
+        structuredContent.restoredElements = restoredElements;
+        if (restoredViewport) {
+          structuredContent.restoredViewport = restoredViewport;
+        }
+      }
+
       return {
         content: [{ type: "text", text: `Diagram displayed! Checkpoint id: "${checkpointId}".
 If user asks to create a new diagram - simply create a new one from scratch.
@@ -364,7 +453,7 @@ However, if the user wants to edit something on this diagram "${checkpointId}", 
   simply start from the first element [{"type":"restoreCheckpoint","id":"${checkpointId}"}, ...your new elements...]
   this will use same diagram state as the user currently sees, including any manual edits they made in fullscreen, allowing you to add elements on top.
   To remove elements from the restored state, use: {"type":"deleteElement","id":"<elementId>"}` }],
-        structuredContent: { checkpointId },
+        structuredContent,
       };
     },
   );
