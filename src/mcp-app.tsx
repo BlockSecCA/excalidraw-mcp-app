@@ -1,12 +1,21 @@
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
 import type { App } from "@modelcontextprotocol/ext-apps";
-import { Excalidraw, exportToSvg, convertToExcalidrawElements } from "@excalidraw/excalidraw";
+import { Excalidraw, exportToSvg, convertToExcalidrawElements, restore, CaptureUpdateAction, FONT_FAMILY } from "@excalidraw/excalidraw";
 import morphdom from "morphdom";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { initPencilAudio, playStroke } from "./pencil-audio";
 import { captureInitialElements, onEditorChange, setStorageKey, loadPersistedElements, getLatestEditedElements } from "./edit-context";
 import "./global.css";
+
+// ============================================================
+// Debug logging (routes through SDK → host log file)
+// ============================================================
+
+let _logFn: ((msg: string) => void) | null = null;
+function fsLog(msg: string) {
+  if (_logFn) _logFn(msg);
+}
 
 // ============================================================
 // Shared helpers
@@ -108,7 +117,7 @@ function sceneToSvgViewBox(
   };
 }
 
-function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElements }: { toolInput: any; isFinal: boolean; displayMode: string; onElements?: (els: any[]) => void; editedElements?: any[] }) {
+function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElements, onViewport }: { toolInput: any; isFinal: boolean; displayMode: string; onElements?: (els: any[]) => void; editedElements?: any[]; onViewport?: (vp: ViewportRect) => void }) {
   const svgRef = useRef<HTMLDivElement | null>(null);
   const latestRef = useRef<any[]>([]);
   const [, setCount] = useState(0);
@@ -137,7 +146,7 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
   const fontsReady = useRef<Promise<void> | null>(null);
   const ensureFontsLoaded = useCallback(() => {
     if (!fontsReady.current) {
-      fontsReady.current = document.fonts.load('20px Virgil').then(() => {});
+      fontsReady.current = document.fonts.load('20px Excalifont').then(() => {});
     }
     return fontsReady.current;
   }, []);
@@ -196,7 +205,7 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
       );
       const excalidrawEls = convertToExcalidrawElements(withLabelDefaults, { regenerateIds: false })
         // Force Virgil (fontFamily: 1) on all text — including label-generated ones
-        .map((el: any) => el.type === "text" ? { ...el, fontFamily: 1 } : el);
+        .map((el: any) => el.type === "text" ? { ...el, fontFamily: (FONT_FAMILY as any).Excalifont ?? 1 } : el);
 
       const svg = await exportToSvg({
         elements: excalidrawEls as any,
@@ -230,6 +239,7 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
       // Animate viewport in scene space, convert to SVG space at apply time
       if (viewport) {
         targetVP.current = { ...viewport };
+        onViewport?.(viewport);
         if (!animatedVP.current) {
           // First viewport — snap immediately
           animatedVP.current = { ...viewport };
@@ -242,6 +252,7 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
       } else {
         // No explicit viewport — use default
         const defaultVP: ViewportRect = { x: 0, y: 0, width: 1024, height: 768 };
+        onViewport?.(defaultVP);
         targetVP.current = defaultVP;
         if (!animatedVP.current) {
           animatedVP.current = { ...defaultVP };
@@ -275,7 +286,7 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
         el.label ? { ...el, label: { textAlign: "center", verticalAlign: "middle", ...el.label } } : el
       );
       const converted = convertToExcalidrawElements(withDefaults, { regenerateIds: false })
-        .map((el: any) => el.type === "text" ? { ...el, fontFamily: 1 } : el);
+        .map((el: any) => el.type === "text" ? { ...el, fontFamily: (FONT_FAMILY as any).Excalifont ?? 1 } : el);
       captureInitialElements(converted);
       // Only set elements if user hasn't edited yet (editedElements means user edits exist)
       if (!editedElements) onElements?.(converted);
@@ -353,26 +364,32 @@ function ExcalidrawApp() {
   const [displayMode, setDisplayMode] = useState<"inline" | "fullscreen">("inline");
   const [elements, setElements] = useState<any[]>([]);
   const [userEdits, setUserEdits] = useState<any[] | null>(null);
+  const [editorReady, setEditorReady] = useState(false);
+  const [excalidrawApi, setExcalidrawApi] = useState<any>(null);
+  const [editorSettled, setEditorSettled] = useState(false);
   const appRef = useRef<App | null>(null);
+  const svgViewportRef = useRef<ViewportRect | null>(null);
 
   const toggleFullscreen = useCallback(async () => {
     if (!appRef.current) return;
     const newMode = displayMode === "fullscreen" ? "inline" : "fullscreen";
+    fsLog(`toggle: ${displayMode}→${newMode}`);
     // Sync edited elements before leaving fullscreen
     if (newMode === "inline") {
       const edited = getLatestEditedElements();
       if (edited) {
-        setElements(edited);
+            setElements(edited);
         setUserEdits(edited);
       }
     }
     try {
       const result = await appRef.current.requestDisplayMode({ mode: newMode });
+      fsLog(`requestDisplayMode result: ${result.mode}`);
       setDisplayMode(result.mode as "inline" | "fullscreen");
     } catch (err) {
-      console.error("Failed to change display mode:", err);
+      fsLog(`requestDisplayMode FAILED: ${err}`);
     }
-  }, [displayMode]);
+  }, [displayMode, elements.length, inputIsFinal]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -382,14 +399,74 @@ function ExcalidrawApp() {
     return () => document.removeEventListener("keydown", handler);
   }, [displayMode, toggleFullscreen]);
 
+  // SVG-first fullscreen: keep showing SVG during animation, load fonts in bg
+  useEffect(() => {
+    if (displayMode !== "fullscreen" || !inputIsFinal || elements.length === 0) {
+      setEditorReady(false);
+      setExcalidrawApi(null);
+      setEditorSettled(false);
+      return;
+    }
+    document.fonts.ready.then(() => {
+      setTimeout(() => setEditorReady(true), 300);
+    });
+  }, [displayMode, inputIsFinal, elements.length]);
+
+  // After editor mounts: refresh text dimensions, set viewport, then reveal
+  const mountEditor = displayMode === "fullscreen" && inputIsFinal && elements.length > 0 && editorReady;
+  useEffect(() => {
+    if (!mountEditor || !excalidrawApi) return;
+    const api = excalidrawApi;
+
+    const waitForFonts = async () => {
+      try { await document.fonts.load('20px Excalifont'); } catch {}
+      await document.fonts.ready;
+
+      const sceneElements = api.getSceneElements();
+      if (!sceneElements?.length) return;
+      const { elements: fixed } = restore(
+        { elements: sceneElements },
+        null, null,
+        { refreshDimensions: true }
+      );
+      // Set viewport imperatively — initialData.appState is ignored by Excalidraw
+      const vp = svgViewportRef.current;
+      const appState = api.getAppState() || {};
+      const cw = appState.width || window.innerWidth;
+      const ch = appState.height || window.innerHeight;
+      let appStateUpdate: any = {};
+      if (vp) {
+        const zoom = Math.min(cw / vp.width, ch / vp.height);
+        const scrollX = cw / 2 - (vp.x + vp.width / 2) * zoom;
+        const scrollY = ch / 2 - (vp.y + vp.height / 2) * zoom;
+        appStateUpdate = { scrollX, scrollY, zoom: { value: zoom } };
+      }
+      api.updateScene({
+        elements: fixed,
+        appState: appStateUpdate,
+        captureUpdate: CaptureUpdateAction.NEVER,
+      });
+      // Wait one frame for render to settle, then reveal editor
+      requestAnimationFrame(() => {
+        setEditorSettled(true);
+      });
+    };
+
+    const timer = setTimeout(waitForFonts, 200);
+    return () => clearTimeout(timer);
+  }, [mountEditor, excalidrawApi]);
+
   const { app, error } = useApp({
     appInfo: { name: "Excalidraw", version: "1.0.0" },
     capabilities: {},
     onAppCreated: (app) => {
       appRef.current = app;
+      _logFn = (msg) => app.sendLog({ level: "info", logger: "FS", data: msg });
+      fsLog("app created, logger ready");
 
       app.onhostcontextchanged = (ctx: any) => {
         if (ctx.displayMode) {
+          fsLog(`hostContextChanged: displayMode=${ctx.displayMode}`);
           // Sync edited elements when host exits fullscreen
           if (ctx.displayMode === "inline") {
             const edited = getLatestEditedElements();
@@ -431,8 +508,6 @@ function ExcalidrawApp() {
   if (error) return <div className="error">ERROR: {error.message}</div>;
   if (!app) return <div className="loading">Connecting...</div>;
 
-  // Show interactive Excalidraw editor only in fullscreen AFTER streaming is done
-  const showEditor = displayMode === "fullscreen" && inputIsFinal && elements.length > 0;
   return (
     <main className={`main${displayMode === "fullscreen" ? " fullscreen" : ""}`}>
       {displayMode === "inline" && (
@@ -446,20 +521,30 @@ function ExcalidrawApp() {
           </button>
         </div>
       )}
-      {showEditor ? (
-        <div style={{ width: "100%", height: "100vh" }}>
+      {/* Editor: mount hidden when ready, reveal after viewport is set */}
+      {mountEditor && (
+        <div style={{
+          width: "100%",
+          height: "100vh",
+          visibility: editorSettled ? "visible" : "hidden",
+          position: editorSettled ? undefined : "absolute",
+          inset: editorSettled ? undefined : 0,
+        }}>
           <Excalidraw
+            excalidrawAPI={(api) => { setExcalidrawApi(api); fsLog(`excalidrawAPI set`); }}
             initialData={{ elements: elements as any, scrollToContent: true }}
             theme="light"
             onChange={(els) => onEditorChange(app, els)}
           />
         </div>
-      ) : (
+      )}
+      {/* SVG: stays visible until editor is fully settled */}
+      {!editorSettled && (
         <div
           onClick={displayMode === "inline" ? toggleFullscreen : undefined}
           style={{ cursor: displayMode === "inline" ? "pointer" : undefined }}
         >
-          <DiagramView toolInput={toolInput} isFinal={inputIsFinal} displayMode={displayMode} onElements={setElements} editedElements={userEdits ?? undefined} />
+          <DiagramView toolInput={toolInput} isFinal={inputIsFinal} displayMode={displayMode} onElements={setElements} editedElements={userEdits ?? undefined} onViewport={(vp) => { svgViewportRef.current = vp; }} />
         </div>
       )}
     </main>

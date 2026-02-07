@@ -36090,7 +36090,8 @@ Call read_me first to learn the element format.`,
         _meta: {
           ui: {
             ...cspMeta.ui,
-            prefersBorder: true
+            prefersBorder: true,
+            permissions: { clipboardWrite: {} }
           }
         }
       }]

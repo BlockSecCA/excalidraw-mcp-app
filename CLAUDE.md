@@ -140,7 +140,14 @@ app.sendLog({ level: "info", logger: "Excalidraw", data: "my message" });
 **Log file**: `~/Library/Logs/Claude/claude.ai-web.log`
 
 ```bash
+# Fullscreen transition logs (logger: "FS")
+grep "FS" ~/Library/Logs/Claude/claude.ai-web.log | tail -40
+
+# General widget logs (logger: "Excalidraw")
 grep "Excalidraw" ~/Library/Logs/Claude/claude.ai-web.log | tail -20
+
+# Clear logs before repro for clean output
+> ~/Library/Logs/Claude/claude.ai-web.log
 ```
 
 ### Widget debugging
