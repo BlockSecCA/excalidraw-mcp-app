@@ -294,9 +294,14 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
       let base: any[] | undefined;
       let savedViewport: ViewportRect | null = null;
       if (restoreId && serverRestored) {
-        // Server provides restored elements via structuredContent
-        base = serverRestored.elements;
+        // Server provides RAW elements — need to convert (expand labels, etc.)
+        const rawBase = serverRestored.elements;
         savedViewport = serverRestored.viewport;
+        const withDefaults = rawBase.map((el: any) =>
+          el.label ? { ...el, label: { textAlign: "center", verticalAlign: "middle", ...el.label } } : el
+        );
+        base = convertToExcalidrawElements(withDefaults, { regenerateIds: false })
+          .map((el: any) => el.type === "text" ? { ...el, fontFamily: (FONT_FAMILY as any).Excalifont ?? 1 } : el);
         if (base && deleteIds.size > 0) {
           base = base.filter((el: any) => !deleteIds.has(el.id));
         }
@@ -341,8 +346,14 @@ function DiagramView({ toolInput, isFinal, displayMode, onElements, editedElemen
     let base: any[] | undefined;
     let savedViewport: ViewportRect | null = null;
     if (streamRestoreId && serverRestored) {
-      base = serverRestored.elements;
+      // Server provides RAW elements — need to convert (expand labels, etc.)
+      const rawBase = serverRestored.elements;
       savedViewport = serverRestored.viewport;
+      const withDefaults = rawBase.map((el: any) =>
+        el.label ? { ...el, label: { textAlign: "center", verticalAlign: "middle", ...el.label } } : el
+      );
+      base = convertToExcalidrawElements(withDefaults, { regenerateIds: false })
+        .map((el: any) => el.type === "text" ? { ...el, fontFamily: (FONT_FAMILY as any).Excalifont ?? 1 } : el);
       if (base && streamDeleteIds.size > 0) {
         base = base.filter((el: any) => !streamDeleteIds.has(el.id));
       }
