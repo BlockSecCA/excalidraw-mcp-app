@@ -33,10 +33,10 @@ Standalone MCP server that streams Excalidraw diagrams as SVG with hand-drawn an
 ## Architecture
 
 ```
-server.ts        → 2 tools (read_me, create_view) + resource + cheat sheet
-main.ts          → HTTP (Streamable) + stdio transports
-src/mcp-app.tsx  → React widget: SVG-only rendering via exportToSvg + morphdom
-src/global.css   → Animations (stroke draw-on, fade-in) + auto-resize
+server.ts             → 2 tools (read_me, create_view) + resource + cheat sheet
+main.ts               → HTTP (Streamable) + stdio transports
+src/mcp-app.tsx       → React widget: SVG-only rendering via exportToSvg + morphdom + screenshot capture
+src/global.css        → Animations (stroke draw-on, fade-in) + auto-resize
 ```
 
 ## Tools
@@ -47,7 +47,7 @@ Returns a cheat sheet with element format, color palettes, coordinate tips, and 
 ### `create_view` (UI tool)
 Takes `elements` — a JSON string of standard Excalidraw elements. The widget parses partial JSON during streaming and renders via `exportToSvg` + morphdom diffing. No Excalidraw React canvas component — pure SVG rendering.
 
-**Screenshot as model context:** After final render, the SVG is captured as a 512px-max PNG and sent via `app.updateModelContext()` so the model can see the diagram and iterate on user feedback.
+**Screenshot as model context:** After final render, the widget captures an 800px-max PNG and sends it via `app.updateModelContext()`. Claude can see the rendered diagram and iterate on user feedback (e.g., "make that box bigger", "the arrow points the wrong way").
 
 ## Key Design Decisions
 
@@ -93,15 +93,14 @@ npm run build
 
 Build pipeline: `tsc --noEmit` → `vite build` (singlefile HTML) → `tsc -p tsconfig.server.json` → `bun build` (server + index).
 
-### Bun CPU compatibility (Kali workaround)
+### Bun build
 
-Bun 1.3.8 requires AVX2 instructions. If `npm run build` fails with "Illegal instruction", use esbuild:
+If the default `bun` gives "Illegal instruction" (no AVX2), use the baseline binary:
 
 ```bash
-# After vite + tsc succeed, replace the bun steps:
-npx esbuild server.ts --bundle --platform=node --outfile=dist/server.js --format=esm --packages=external
-npx esbuild main.ts --bundle --platform=node --outfile=dist/index.js --format=esm --packages=external
-sed -i '1i#!/usr/bin/env node' dist/index.js
+BUN=node_modules/@oven/bun-linux-x64-baseline/bin/bun
+$BUN build server.ts --outdir dist --target node
+$BUN build main.ts --outfile dist/index.js --target node --external "./server.js" --banner "#!/usr/bin/env node"
 ```
 
 ## Running

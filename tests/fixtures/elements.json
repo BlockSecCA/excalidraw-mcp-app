@@ -1,0 +1,88 @@
+{
+  "singleRectangle": [
+    {
+      "type": "rectangle",
+      "id": "rect1",
+      "x": 100,
+      "y": 100,
+      "width": 200,
+      "height": 100,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1
+    }
+  ],
+  "multipleShapes": [
+    {
+      "type": "rectangle",
+      "id": "rect1",
+      "x": 100,
+      "y": 100,
+      "width": 150,
+      "height": 80
+    },
+    {
+      "type": "ellipse",
+      "id": "ellipse1",
+      "x": 300,
+      "y": 100,
+      "width": 120,
+      "height": 120
+    },
+    {
+      "type": "arrow",
+      "id": "arrow1",
+      "x": 260,
+      "y": 140,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    }
+  ],
+  "withText": [
+    {
+      "type": "rectangle",
+      "id": "box1",
+      "x": 100,
+      "y": 100,
+      "width": 200,
+      "height": 100,
+      "label": {
+        "text": "Hello World"
+      }
+    }
+  ],
+  "withViewport": [
+    {
+      "type": "cameraUpdate",
+      "x": 50,
+      "y": 50,
+      "width": 400,
+      "height": 300
+    },
+    {
+      "type": "rectangle",
+      "id": "rect1",
+      "x": 100,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    }
+  ],
+  "checkpoint": [
+    {
+      "type": "restoreCheckpoint",
+      "id": "checkpoint-abc123"
+    },
+    {
+      "type": "rectangle",
+      "id": "newRect",
+      "x": 300,
+      "y": 100,
+      "width": 150,
+      "height": 80
+    }
+  ]
+}
