@@ -1,5 +1,9 @@
 # Excalidraw MCP App Server
 
+> **Fork of [antonpk1/excalidraw-mcp-app](https://github.com/antonpk1/excalidraw-mcp-app)**
+>
+> This fork uses **client-side checkpoint persistence** instead of the upstream's server-side storage (Redis/file). The trade-off: checkpoints don't persist across sessions, but no temp files are left on disk. See [docs/notes/checkpoint-restore-fix.md](docs/notes/checkpoint-restore-fix.md) for details.
+
 MCP server that streams hand-drawn Excalidraw diagrams with smooth viewport camera control and interactive fullscreen editing.
 
 ![Demo](demo.gif)
@@ -16,13 +20,13 @@ In [claude.ai](https://claude.ai):
 
 **Option A: Download Extension**
 
-1. Download `excalidraw-mcp-app.mcpb` from [Releases](https://github.com/antonpk1/excalidraw-mcp-app/releases)
+1. Download `excalidraw-mcp-app.mcpb` from [Releases](https://github.com/BlockSecCA/excalidraw-mcp-app/releases)
 2. Double-click to install in Claude Desktop
 
 **Option B: Build from Source**
 
 ```bash
-git clone https://github.com/antonpk1/excalidraw-mcp-app.git
+git clone https://github.com/BlockSecCA/excalidraw-mcp-app.git
 cd excalidraw-mcp-app
 npm install && npm run build
 ```
