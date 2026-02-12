@@ -2,7 +2,7 @@
 
 > **Fork of [antonpk1/excalidraw-mcp-app](https://github.com/antonpk1/excalidraw-mcp-app)**
 >
-> This fork uses **client-side checkpoint persistence** instead of the upstream's server-side storage (Redis/file). The trade-off: checkpoints don't persist across sessions, but no temp files are left on disk. See [docs/notes/checkpoint-restore-fix.md](docs/notes/checkpoint-restore-fix.md) for details.
+> This fork uses **client-side checkpoint persistence** instead of the upstream's server-side storage (Redis/file). The trade-off: checkpoints don't persist across sessions, but no temp files are left on disk. See [docs/checkpoint-restore-fix.md](docs/checkpoint-restore-fix.md) for details.
 
 MCP server that streams hand-drawn Excalidraw diagrams with smooth viewport camera control and interactive fullscreen editing.
 
