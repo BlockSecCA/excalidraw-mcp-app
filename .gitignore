@@ -6,3 +6,7 @@ bun.lock
 
 # Session notes (not tracked)
 docs/notes/
+
+# Test artifacts
+playwright-report/
+test-results/
