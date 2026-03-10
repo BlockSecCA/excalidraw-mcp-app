@@ -1,5 +1,7 @@
 # Excalidraw MCP App Server
 
+> PUBLIC REPO — No secrets, no PII, no internal references. Assume strangers read everything.
+
 **Origin:** Cloned from [github.com/antonpk1/excalidraw-mcp-app](https://github.com/antonpk1/excalidraw-mcp-app)
 **Security Audit:** Passed (2025-02-07) — no concerns
 **License:** MIT
