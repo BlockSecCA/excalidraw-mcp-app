@@ -1,5 +1,11 @@
 # Excalidraw MCP App Server
 
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](https://github.com/BlockSecCA/excalidraw-mcp-app/releases)
+[![License](https://img.shields.io/github/license/BlockSecCA/excalidraw-mcp-app)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](src/)
+[![MCP](https://img.shields.io/badge/MCP-server-orange)](https://modelcontextprotocol.io)
+[![Excalidraw](https://img.shields.io/badge/Excalidraw-diagrams-6965DB)](https://excalidraw.com)
+
 > **Fork of [antonpk1/excalidraw-mcp-app](https://github.com/antonpk1/excalidraw-mcp-app)**
 >
 > This fork uses **client-side checkpoint persistence** instead of the upstream's server-side storage (Redis/file). The trade-off: checkpoints don't persist across sessions, but no temp files are left on disk. See [docs/checkpoint-restore-fix.md](docs/checkpoint-restore-fix.md) for details.
